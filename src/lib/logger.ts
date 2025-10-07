@@ -1,8 +1,14 @@
 import pino from 'pino';
 
+// Simplified logger that works with Next.js API routes
+// pino-pretty causes issues in serverless/edge environments
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  ...(process.env.NODE_ENV === 'development' && {
+  browser: {
+    asObject: true,
+  },
+  // Only use pino-pretty in worker (not in API routes)
+  ...(process.env.WORKER_MODE === 'true' && process.env.NODE_ENV === 'development' && {
     transport: {
       target: 'pino-pretty',
       options: {

@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { lab } from 'd3-color';
-import kmeans from 'ml-kmeans';
+import { kmeans } from 'ml-kmeans';
 import { ColorLAB, ColorRGB } from './types';
 
 /**

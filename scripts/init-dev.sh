@@ -30,7 +30,7 @@ echo "📦 Starting PostgreSQL, Redis, and MinIO with Docker..."
 docker run --name casiopea-postgres \
   -e POSTGRES_PASSWORD=password \
   -e POSTGRES_DB=casiopea \
-  -p 5432:5432 \
+  -p 5433:5432 \
   -d ankane/pgvector 2>/dev/null || docker start casiopea-postgres
 
 # Redis
@@ -39,11 +39,14 @@ docker run --name casiopea-redis \
   -d redis:alpine 2>/dev/null || docker start casiopea-redis
 
 # MinIO (S3-compatible storage)
+docker volume create casiopea-minio-data 2>/dev/null || true
 docker run --name casiopea-minio \
   -p 9000:9000 \
   -p 9001:9001 \
+  -v casiopea-minio-data:/data \
   -e MINIO_ROOT_USER=minioadmin \
   -e MINIO_ROOT_PASSWORD=minioadmin \
+  -e MINIO_DOMAIN=localhost \
   -d minio/minio server /data --console-address ":9001" 2>/dev/null || docker start casiopea-minio
 
 echo "⏳ Waiting for services to start..."
@@ -53,13 +56,13 @@ sleep 5
 echo "🪣 Creating MinIO bucket..."
 docker exec casiopea-minio mc alias set local http://localhost:9000 minioadmin minioadmin 2>/dev/null || true
 docker exec casiopea-minio mc mb local/casiopea 2>/dev/null || echo "Bucket already exists"
-docker exec casiopea-minio mc anonymous set download local/casiopea 2>/dev/null || true
+docker exec casiopea-minio mc anonymous set upload local/casiopea 2>/dev/null || true
 
 # Create .env file
 if [ ! -f .env ]; then
     echo "📝 Creating .env file..."
     cat > .env << 'EOF'
-DATABASE_URL="postgresql://postgres:password@localhost:5432/casiopea?schema=public"
+DATABASE_URL="postgresql://postgres:password@localhost:5433/casiopea"
 REDIS_URL="redis://localhost:6379"
 
 S3_ENDPOINT="http://localhost:9000"
@@ -95,8 +98,8 @@ INSERT INTO users (id, email, name, created_at)
 VALUES ('00000000-0000-0000-0000-000000000000', 'demo@casiopea.app', 'Demo User', NOW())
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_settings (user_id, location_lat, location_lon, location_name, created_at, updated_at)
-VALUES ('00000000-0000-0000-0000-000000000000', 40.7128, -74.0060, 'New York, NY', NOW(), NOW())
+INSERT INTO user_settings (id, user_id, location_lat, location_lon, location_name, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 40.7128, -74.0060, 'New York, NY', NOW(), NOW())
 ON CONFLICT DO NOTHING;
 SQL
 

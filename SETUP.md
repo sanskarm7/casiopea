@@ -17,7 +17,7 @@ npm install
 docker run --name casiopea-postgres \
   -e POSTGRES_PASSWORD=password \
   -e POSTGRES_DB=casiopea \
-  -p 5432:5432 \
+  -p 5433:5432 \
   -d ankane/pgvector
 
 # Or install natively
@@ -42,7 +42,7 @@ brew services start redis
 
 ```bash
 cat > .env << 'EOF'
-DATABASE_URL="postgresql://postgres:password@localhost:5432/casiopea?schema=public"
+DATABASE_URL="postgresql://postgres:password@localhost:5433/casiopea"
 REDIS_URL="redis://localhost:6379"
 
 # For development: use local filesystem mock
@@ -85,13 +85,13 @@ npm run prisma:push
 ### 7. Create Default User
 
 ```bash
-psql "postgresql://postgres:password@localhost:5432/casiopea" << 'SQL'
+psql "postgresql://postgres:password@localhost:5433/casiopea" << 'SQL'
 INSERT INTO users (id, email, name, created_at)
 VALUES ('00000000-0000-0000-0000-000000000000', 'demo@casiopea.app', 'Demo User', NOW())
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_settings (user_id, location_lat, location_lon, location_name, created_at, updated_at)
-VALUES ('00000000-0000-0000-0000-000000000000', 40.7128, -74.0060, 'New York, NY', NOW(), NOW())
+INSERT INTO user_settings (id, user_id, location_lat, location_lon, location_name, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 40.7128, -74.0060, 'New York, NY', NOW(), NOW())
 ON CONFLICT DO NOTHING;
 SQL
 ```
@@ -141,7 +141,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: casiopea
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

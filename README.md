@@ -99,7 +99,7 @@ Edit `.env` with your configuration:
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/casiopea?schema=public"
+DATABASE_URL="postgresql://user:password@localhost:5433/casiopea"
 
 # Redis
 REDIS_URL="redis://localhost:6379"
