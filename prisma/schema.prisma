@@ -1,0 +1,247 @@
+// Prisma schema for Casiopea AI Wardrobe System
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  settings     UserSettings?
+  images       Image[]
+  garments     Garment[]
+  outfits      Outfit[]
+  wearHistory  WearHistory[]
+  jobs         Job[]
+
+  @@map("users")
+}
+
+model UserSettings {
+  id           String  @id @default(uuid())
+  userId       String  @unique @map("user_id")
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  locationLat  Float?  @map("location_lat")
+  locationLon  Float?  @map("location_lon")
+  locationName String? @map("location_name")
+  tempUnit     String  @default("celsius") @map("temp_unit")
+  recencyDays  Int     @default(7) @map("recency_days")
+  
+  // JSON storing scoring weights
+  outfitWeights Json   @default("{\"color\":0.30,\"style\":0.15,\"weather\":0.20,\"pattern\":0.10,\"prefs\":0.10,\"recency\":0.10,\"diversity\":0.05}") @map("outfit_weights")
+  
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("user_settings")
+}
+
+model Image {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  originalKey      String   @map("original_key")
+  objectKey        String   @map("object_key")
+  width            Int?
+  height           Int?
+  phash            String?  @map("phash")
+  backgroundRemoved Boolean @default(false) @map("background_removed")
+  hasPerson        Boolean @default(false) @map("has_person")
+  
+  createdAt        DateTime @default(now()) @map("created_at")
+  
+  garments         Garment[]
+
+  @@index([phash])
+  @@index([userId])
+  @@map("images")
+}
+
+model Garment {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageId     String   @map("image_id")
+  image       Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  
+  name        String?
+  category    String   // top, bottom, dress, footwear, outerwear, accessory
+  subcategory String?  // shirt, jeans, sneakers, etc.
+  autoDetected Boolean @default(false) @map("auto_detected")
+  
+  // Attributes
+  warmthScore     Int?     @map("warmth_score")
+  formalityScore  Int?     @map("formality_score")
+  waterResistant  Boolean  @default(false) @map("water_resistant")
+  windResistant   Boolean  @default(false) @map("wind_resistant")
+  uvProtective    Boolean  @default(false) @map("uv_protective")
+  sleeveLength    String?  @map("sleeve_length")
+  breathability   Int?
+  
+  // Pattern
+  hasPattern       Boolean @default(false) @map("has_pattern")
+  patternType      String? @map("pattern_type")
+  patternIntensity String? @map("pattern_intensity")
+  
+  // Metadata
+  season      String?   @default("all")
+  isAvailable Boolean   @default(true) @map("is_available")
+  lastWorn    DateTime? @map("last_worn")
+  wearCount   Int       @default(0) @map("wear_count")
+  
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  colors      GarmentColor[]
+  embeddings  Embedding[]
+  
+  outfitsAsTop       Outfit[] @relation("OutfitTop")
+  outfitsAsBottom    Outfit[] @relation("OutfitBottom")
+  outfitsAsDress     Outfit[] @relation("OutfitDress")
+  outfitsAsFootwear  Outfit[] @relation("OutfitFootwear")
+  outfitsAsOuterwear Outfit[] @relation("OutfitOuterwear")
+
+  @@index([userId, category])
+  @@index([lastWorn])
+  @@index([warmthScore])
+  @@map("garments")
+}
+
+model GarmentColor {
+  id        String  @id @default(uuid())
+  garmentId String  @map("garment_id")
+  garment   Garment @relation(fields: [garmentId], references: [id], onDelete: Cascade)
+  
+  labL      Float   @map("lab_l")
+  labA      Float   @map("lab_a")
+  labB      Float   @map("lab_b")
+  ratio     Float
+  chroma    Float?
+  hue       Float?
+  isNeutral Boolean @default(false) @map("is_neutral")
+  isAccent  Boolean @default(false) @map("is_accent")
+  rank      Int?    // 0 = dominant, 1 = secondary, etc.
+  
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([garmentId, rank])
+  @@map("garment_colors")
+}
+
+model Embedding {
+  id        String   @id @default(uuid())
+  ownerType String   @map("owner_type") // 'garment' or 'outfit'
+  ownerId   String   @map("owner_id")
+  
+  // pgvector type - use Unsupported for now, will work with pgvector extension
+  vector    Unsupported("vector(512)")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  garment   Garment? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerType, ownerId])
+  @@map("embeddings")
+}
+
+model Job {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  kind        String    // PROCESS_IMAGE, GENERATE_OUTFITS, etc.
+  status      String    // queued, processing, completed, failed, dead_letter, needs_review
+  checksum    String?
+  payloadJson Json?     @map("payload_json")
+  errorJson   Json?     @map("error_json")
+  attempts    Int       @default(0)
+  
+  createdAt   DateTime  @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([status])
+  @@index([checksum])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("jobs")
+}
+
+model Outfit {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name         String?
+  
+  // Garment slots
+  topId        String?  @map("top_id")
+  top          Garment? @relation("OutfitTop", fields: [topId], references: [id], onDelete: SetNull)
+  
+  bottomId     String?  @map("bottom_id")
+  bottom       Garment? @relation("OutfitBottom", fields: [bottomId], references: [id], onDelete: SetNull)
+  
+  dressId      String?  @map("dress_id")
+  dress        Garment? @relation("OutfitDress", fields: [dressId], references: [id], onDelete: SetNull)
+  
+  footwearId   String?  @map("footwear_id")
+  footwear     Garment? @relation("OutfitFootwear", fields: [footwearId], references: [id], onDelete: SetNull)
+  
+  outerwearId  String?  @map("outerwear_id")
+  outerwear    Garment? @relation("OutfitOuterwear", fields: [outerwearId], references: [id], onDelete: SetNull)
+  
+  accessoryIds String[] @map("accessory_ids")
+  
+  // Metadata
+  colorHarmonyType String? @map("color_harmony_type")
+  score            Float?
+  scoreBreakdown   Json?   @map("score_breakdown")
+  
+  // Weather suitability
+  temperatureMin   Float?  @map("temperature_min")
+  temperatureMax   Float?  @map("temperature_max")
+  suitableForRain  Boolean @default(false) @map("suitable_for_rain")
+  
+  createdAt        DateTime @default(now()) @map("created_at")
+  
+  wearHistory      WearHistory[]
+
+  @@index([userId])
+  @@index([score(sort: Desc)])
+  @@map("outfits")
+}
+
+model WearHistory {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outfitId        String?   @map("outfit_id")
+  outfit          Outfit?   @relation(fields: [outfitId], references: [id], onDelete: SetNull)
+  
+  garmentIds      String[]  @map("garment_ids")
+  
+  dateWorn        DateTime  @map("date_worn") @db.Date
+  weatherTemp     Float?    @map("weather_temp")
+  weatherCondition String?  @map("weather_condition")
+  weatherJson     Json?     @map("weather_json")
+  
+  userFeedback    String?   @map("user_feedback") // liked, neutral, disliked
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, dateWorn(sort: Desc)])
+  @@index([outfitId])
+  @@map("wear_history")
+}
+
